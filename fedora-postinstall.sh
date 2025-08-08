@@ -85,6 +85,7 @@ configure_dnf() {
 # Install RPM Fusion repositories
 install_rpm_fusion() {
     info "Checking for existing RPM Fusion repositories..."
+    info "Some sections coming up depend on having RPM Fusion set up. If you don't have it installed, you won't be bothered with anything that needs it as a prerequisite"
 
     # Check if RPM Fusion repositories are already present
     if dnf repolist --enabled | grep -E "^rpmfusion-free\s" && dnf repolist --enabled | grep -E "^rpmfusion-nonfree\s"; then
@@ -382,14 +383,45 @@ configure_hostname() {
     fi
 }
 
-# System cleanup
-system_cleanup() {
-    if ! ask_confirmation "Run system cleanup (clear package cache, remove orphaned packages)?"; then
-        info "Skipping system cleanup"
+# Firmware update via fwupdmgr
+#firmware_update() {
+#    if ! command -v fwupdmgr &> /dev/null; then
+#        info "fwupdmgr not found. Installing..."
+#        sudo dnf install -y fwupd
+#    fi
+#
+#    if ! ask_confirmation "Check and apply available firmware updates using fwupdmgr? (HAVE YOUR DEVICE PLUGGED IN BEFORE YOU DO THIS!)"; then
+#        info "Skipping firmware updates"
+#        return
+#    fi
+#
+#    info "Refreshing firmware metadata..."
+#    sudo fwupdmgr refresh --force
+#
+#    info "Checking for available firmware updates..."
+#    FWUPD_OUTPUT=$(sudo fwupdmgr get-updates)
+#
+#    if echo "$FWUPD_OUTPUT" | grep -q "No updatable devices."; then
+#        log "No firmware updates available"
+#    else
+#        echo "$FWUPD_OUTPUT"
+#        if ask_confirmation "Apply firmware updates now? (May require reboot)"; then
+#            sudo fwupdmgr update
+#            log "Firmware update process completed"
+#        else
+#            info "Skipping firmware update"
+#        fi
+#    fi
+#}
+
+# System Package cleanup
+package_cleanup() {
+    if ! ask_confirmation "Run package cleanup (clear package cache, remove orphaned packages)?"; then
+        info "Skipping package cleanup"
         return
     fi
 
-    info "Running system cleanup..."
+    info "Running package cleanup..."
 
     info "Cleaning DNF package cache..."
     sudo dnf clean all
@@ -402,7 +434,7 @@ system_cleanup() {
 
     info "Cleaning Flatpak unused runtimes..."
     flatpak uninstall --unused -y 2>/dev/null || true
-    log "System cleanup completed"
+    log "Package cleanup completed"
 }
 
 # Setup automatic cleanup timer
@@ -481,8 +513,11 @@ main() {
     configure_hostname
     setup_cleanup_timer
 
-    # Final cleanup
-    system_cleanup
+    # Final package cleanup
+    package_cleanup
+
+   # Firmware Update
+   #firmware_update
 
     log "Post-installation setup completed successfully!"
 
