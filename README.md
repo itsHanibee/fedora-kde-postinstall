@@ -1,4 +1,4 @@
-# Fedora 42 KDE Plasma – Post-Install Script
+# Fedora 42 KDE Plasma – PostInstall Script
 
 A simple script to set up your fresh Fedora 42 KDE system with essential tools, codecs, drivers, and misc tweaks. \
 Originally created for **personal use**, but contributions and suggestions are always welcome if you'd like to expand upon this.

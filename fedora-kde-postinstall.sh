@@ -383,37 +383,6 @@ configure_hostname() {
     fi
 }
 
-# Firmware update via fwupdmgr
-#firmware_update() {
-#    if ! command -v fwupdmgr &> /dev/null; then
-#        info "fwupdmgr not found. Installing..."
-#        sudo dnf install -y fwupd
-#    fi
-#
-#    if ! ask_confirmation "Check and apply available firmware updates using fwupdmgr? (HAVE YOUR DEVICE PLUGGED IN BEFORE YOU DO THIS!)"; then
-#        info "Skipping firmware updates"
-#        return
-#    fi
-#
-#    info "Refreshing firmware metadata..."
-#    sudo fwupdmgr refresh --force
-#
-#    info "Checking for available firmware updates..."
-#    FWUPD_OUTPUT=$(sudo fwupdmgr get-updates)
-#
-#    if echo "$FWUPD_OUTPUT" | grep -q "No updatable devices."; then
-#        log "No firmware updates available"
-#    else
-#        echo "$FWUPD_OUTPUT"
-#        if ask_confirmation "Apply firmware updates now? (May require reboot)"; then
-#            sudo fwupdmgr update
-#            log "Firmware update process completed"
-#        else
-#            info "Skipping firmware update"
-#        fi
-#    fi
-#}
-
 # System Package cleanup
 package_cleanup() {
     if ! ask_confirmation "Run package cleanup (clear package cache, remove orphaned packages)?"; then
@@ -515,9 +484,6 @@ main() {
 
     # Final package cleanup
     package_cleanup
-
-   # Firmware Update
-   #firmware_update
 
     log "Post-installation setup completed successfully!"
 
