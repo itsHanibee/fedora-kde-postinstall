@@ -24,7 +24,7 @@ Originally created for **personal use**, but contributions and suggestions are a
 ## ⚙️ Usage
 - Download the script onto your system
 ```bash
-wget https://raw.githubusercontent.com/itsHanibee/fedora-kde-postinstall/refs/heads/main/fedora-postinstall.sh
+wget https://raw.githubusercontent.com/itsHanibee/fedora-kde-postinstall/refs/heads/main/fedora-kde-postinstall.sh
 ```
 - Run the script using bash
 ```bash
