@@ -184,7 +184,7 @@ install_packages() {
     if ask_confirmation "Install misc. packages (These include stuff like QoL packages, fonts, archive formats support, CLI apps, etc.)?"; then
         info "Installing..."
 
-        sudo dnf install -y git unzip p7zip p7zip-plugins unrar fuse flatpak-kcm
+        sudo dnf install -y git unzip p7zip p7zip-plugins unrar fuse flatpak-kcm google-noto-sans-runic-fonts
 
         log "Packages installed successfully"
     fi
