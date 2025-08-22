@@ -480,10 +480,10 @@ main() {
     # System optimization
     optimize_boot
     configure_hostname
-    setup_cleanup_timer
+#    setup_cleanup_timer
 
     # Final package cleanup
-    package_cleanup
+ #   package_cleanup
 
     log "Post-installation setup completed successfully!"
 
