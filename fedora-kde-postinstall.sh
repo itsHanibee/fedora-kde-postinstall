@@ -94,7 +94,7 @@ install_rpm_fusion() {
 
         if ask_confirmation "RPM Fusion is already present. Refresh AppStream metadata?"; then
             info "Refreshing AppStream metadata..."
-            sudo dnf makecache
+            sudo dnf group upgrade core
             log "AppStream metadata refreshed"
         else
             info "Skipping metadata refresh"
@@ -116,7 +116,7 @@ install_rpm_fusion() {
     log "RPM Fusion repositories installed successfully"
 
     info "Refreshing AppStream metadata..."
-    sudo dnf makecache
+    sudo dnf group upgrade core
     log "AppStream metadata refreshed"
 }
 
@@ -218,33 +218,25 @@ install_multimedia_codecs() {
 # Configure VA-API for hardware video acceleration
 configure_vaapi() {
     [ "$RPM_FUSION" != "present" ] && return
-
     if ! ask_confirmation "Configure VA-API for hardware video acceleration?"; then
         info "Skipping VA-API configuration"
         return
     fi
-
     info "Configuring VA-API for hardware video acceleration..."
-
     sudo dnf install -y ffmpeg-libs libva libva-utils
-
     log "VA-API base packages installed"
 
     # Detect CPU vendor
     info "Detecting CPU vendor for appropriate driver installation..."
     CPU_VENDOR=$(lscpu | grep "Vendor ID" | awk '{print $3}')
 
-
     if [[ "$CPU_VENDOR" == "GenuineIntel" ]]; then
         info "Intel CPU detected - installing Intel VA-API drivers"
-        info ""
-
         sudo dnf swap -y libva-intel-media-driver intel-media-driver --allowerasing
         sudo dnf install -y libva-intel-driver
-
         log "Intel VA-API drivers installed"
-    fi
-
+    elif [[ "$CPU_VENDOR" == "AuthenticAMD" ]]; then
+        info "AMD CPU detected - installing Mesa VA-API drivers"
         info "Swapping Mesa VA drivers to freeworld package..."
         sudo dnf swap -y mesa-va-drivers mesa-va-drivers-freeworld
         log "Mesa VA drivers swapped successfully"
@@ -253,13 +245,13 @@ configure_vaapi() {
         sudo dnf swap -y mesa-vdpau-drivers mesa-vdpau-drivers-freeworld
         log "Mesa VDPAU drivers swapped successfully"
 
-        info "Swapping Mesa VA 32-bit drivers to freeworld package..."
+        info "Swapping Mesa 32-bit drivers to freeworld package..."
         sudo dnf swap -y mesa-va-drivers.i686 mesa-va-drivers-freeworld.i686
-        log "Mesa VA 32-bit drivers swapped successfully"
-
-        info "Swapping Mesa VDPAU 32-bit drivers to freeworld package..."
         sudo dnf swap -y mesa-vdpau-drivers.i686 mesa-vdpau-drivers-freeworld.i686
-        log "Mesa VDPAU 32-bit drivers swapped successfully"
+        log "Mesa 32-bit drivers swapped successfully"
+
+        log "AMD Mesa VA-API drivers installed"
+    fi
 
     log "VA-API driver optimization completed"
     info "You can test VA-API functionality with: vainfo"
@@ -286,27 +278,71 @@ configure_firefox() {
     info "=========================================="
 }
 
+# NVIDIA
+# Check if GPU supports open-source kernel module
+check_opensource_support() {
+    local device_id="$1"
+    device_id=$(echo "$device_id" | tr '[:lower:]' '[:upper:]')
+
+    # Convert hex device ID to decimal for comparison
+    local device_decimal=$((0x$device_id))
+    local min_supported_decimal=$((0x1E02))  # RTX 2080 Ti - oldest supported card
+
+    # If device ID is 1E02 or newer, use open-source module
+    if [ $device_decimal -ge $min_supported_decimal ]; then
+        log "GPU $device_id (>= 1E02) supports open-source kernel module"
+        return 0
+    else
+        log "GPU $device_id (< 1E02) does not support open-source kernel module"
+        return 1
+    fi
+}
+
 # Install NVIDIA proprietary drivers
 install_nvidia_drivers() {
     [ "$RPM_FUSION" != "present" ] && return
-
     info "Detecting NVIDIA GPU..."
-
     # Check for NVIDIA GPU using lspci
     if lspci | grep -i nvidia >/dev/null 2>&1; then
         NVIDIA_GPU=$(lspci | grep -i nvidia | head -1 | cut -d: -f3 | sed 's/^ *//')
         log "NVIDIA GPU detected: $NVIDIA_GPU"
 
-        if ! ask_confirmation "Install NVIDIA proprietary drivers? This will provide better performance and features compared to the open-source nouveau drivers"; then
-            info "Skipping NVIDIA drivers installation"
-            return
+        # Get GPU PCI device ID
+        GPU_DEVICE_ID=$(lspci -n | grep -i nvidia | head -1 | cut -d' ' -f3 | cut -d':' -f2)
+        log "NVIDIA GPU Device ID: $GPU_DEVICE_ID"
+
+        # Check if GPU supports open-source kernel module based on official NVIDIA list
+        if check_opensource_support "$GPU_DEVICE_ID"; then
+            info "GPU supports open-source kernel module - using open-source module"
+            if ! ask_confirmation "Install NVIDIA proprietary drivers with open-source kernel module? This provides better performance and features compared to nouveau drivers"; then
+                info "Skipping NVIDIA drivers installation"
+                return
+            fi
+            USE_OPENSOURCE_MODULE=true
+        else
+            info "GPU does not support open-source kernel module - using proprietary module"
+            if ! ask_confirmation "Install NVIDIA proprietary drivers? This will provide better performance and features compared to the open-source nouveau drivers"; then
+                info "Skipping NVIDIA drivers installation"
+                return
+            fi
+            USE_OPENSOURCE_MODULE=false
         fi
 
         info "Installing NVIDIA proprietary drivers..."
         info "This may take several minutes as the driver needs to be compiled for your kernel"
 
-        info "Installing NVIDIA kernel module..."
-        sudo dnf install -y akmod-nvidia
+        if [ "$USE_OPENSOURCE_MODULE" = true ]; then
+            info "Installing NVIDIA kernel module (open-source)..."
+            info "Note: Open-source module requires RPM Fusion Tainted repository"
+            info "Installing RPM Fusion Tainted repository..."
+            sudo dnf install -y rpmfusion-nonfree-release-tainted
+            sudo dnf install -y akmod-nvidia-open
+            log "Open-source NVIDIA kernel module installed"
+        else
+            info "Installing NVIDIA kernel module (proprietary)..."
+            sudo dnf install -y akmod-nvidia
+            log "Proprietary NVIDIA kernel module installed"
+        fi
 
         info "Installing NVIDIA CUDA support..."
         sudo dnf install -y xorg-x11-drv-nvidia-cuda
@@ -314,13 +350,14 @@ install_nvidia_drivers() {
         info "Enabling NVIDIA DRM kernel mode setting..."
         sudo grubby --update-kernel=ALL --args="nvidia-drm.modeset=1"
 
-        info ""
         log "NVIDIA drivers installation completed"
         warn "A reboot is required for the NVIDIA drivers to take effect"
         info "After reboot, you can verify the installation with:"
         info "  - nvidia-smi (shows GPU status and driver version)"
         info "  - modinfo -F version nvidia (shows loaded kernel module version)"
-
+        if [ "$USE_OPENSOURCE_MODULE" = true ]; then
+            info "  - lsmod | grep nvidia (should show nvidia_drm, nvidia_modeset, nvidia)"
+        fi
     else
         info "No NVIDIA GPU detected - skipping NVIDIA drivers installation"
     fi
@@ -395,9 +432,6 @@ package_cleanup() {
     info "Cleaning DNF package cache..."
     sudo dnf clean all
 
-    info "Removing orphaned packages..."
-    sudo dnf autoremove -y
-
     info "Refreshing DNF repo metadata ..."
     sudo dnf update --refresh
 
@@ -408,7 +442,7 @@ package_cleanup() {
 
 # Setup automatic cleanup timer
 setup_cleanup_timer() {
-    if ! ask_confirmation "Setup automatic DNF cleanup timer (runs weekly)?"; then
+    if ! ask_confirmation "Setup automatic DNF cache cleanup timer (runs weekly)?"; then
         info "Skipping cleanup timer setup"
         return
     fi
@@ -464,7 +498,6 @@ main() {
 
     # Package repositories and applications
     configure_flatpak
-    install_packages
 
     # Multimedia support (RPM Fusion dependent)
     install_multimedia_codecs
@@ -474,16 +507,17 @@ main() {
     # NVIDIA GPU Drivers
     install_nvidia_drivers
 
-    # Gaming
+    # Misc Packages
+    install_packages
     gaming_packages
 
     # System optimization
     optimize_boot
     configure_hostname
-#    setup_cleanup_timer
 
     # Final package cleanup
- #   package_cleanup
+    package_cleanup
+    setup_cleanup_timer
 
     log "Post-installation setup completed successfully!"
 
