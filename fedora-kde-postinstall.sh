@@ -279,15 +279,15 @@ configure_firefox() {
 }
 
 # NVIDIA
-# Check if GPU supports open-source kernel module
+# Check if GPU supports the open-source kernel module // ref: https://github.com/NVIDIA/open-gpu-kernel-modules
 check_opensource_support() {
     local device_id="$1"
     device_id=$(echo "$device_id" | tr '[:lower:]' '[:upper:]')
-
+    
     # Convert hex device ID to decimal for comparison
     local device_decimal=$((0x$device_id))
-    local min_supported_decimal=$((0x1E02))  # RTX 2080 Ti - oldest supported card
-
+    local min_supported_decimal=$((0x1E02))  # TITAN RTX - oldest supported card wrt. the device ID
+    
     # If device ID is 1E02 or newer, use open-source module
     if [ $device_decimal -ge $min_supported_decimal ]; then
         log "GPU $device_id (>= 1E02) supports open-source kernel module"
@@ -301,17 +301,22 @@ check_opensource_support() {
 # Install NVIDIA proprietary drivers
 install_nvidia_drivers() {
     [ "$RPM_FUSION" != "present" ] && return
+    
     info "Detecting NVIDIA GPU..."
-    # Check for NVIDIA GPU using lspci
-    if lspci | grep -i nvidia >/dev/null 2>&1; then
-        NVIDIA_GPU=$(lspci | grep -i nvidia | head -1 | cut -d: -f3 | sed 's/^ *//')
-        log "NVIDIA GPU detected: $NVIDIA_GPU"
-
-        # Get GPU PCI device ID
-        GPU_DEVICE_ID=$(lspci -n | grep -i nvidia | head -1 | cut -d' ' -f3 | cut -d':' -f2)
-        log "NVIDIA GPU Device ID: $GPU_DEVICE_ID"
-
-        # Check if GPU supports open-source kernel module based on official NVIDIA list
+    # Check for an NVIDIA GPU
+    if ! lspci | grep -i nvidia >/dev/null 2>&1; then
+        info "No NVIDIA GPU detected - skipping NVIDIA drivers installation"
+        return
+    fi
+    
+    NVIDIA_GPU=$(lspci | grep -i nvidia | head -1 | cut -d: -f3 | sed 's/^ *//')
+    log "NVIDIA GPU detected: $NVIDIA_GPU"
+    
+    # Get GPU PCI device ID
+    GPU_DEVICE_ID=$(lspci -n | grep -i nvidia | head -1 | cut -d' ' -f3 | cut -d':' -f2)
+    log "NVIDIA GPU Device ID: $GPU_DEVICE_ID"
+        
+        # Check if GPU supports the open-source kernel module
         if check_opensource_support "$GPU_DEVICE_ID"; then
             info "GPU supports open-source kernel module - using open-source module"
             if ! ask_confirmation "Install NVIDIA proprietary drivers with open-source kernel module? This provides better performance and features compared to nouveau drivers"; then
@@ -327,10 +332,10 @@ install_nvidia_drivers() {
             fi
             USE_OPENSOURCE_MODULE=false
         fi
-
+        
         info "Installing NVIDIA proprietary drivers..."
         info "This may take several minutes as the driver needs to be compiled for your kernel"
-
+        
         if [ "$USE_OPENSOURCE_MODULE" = true ]; then
             info "Installing NVIDIA kernel module (open-source)..."
             info "Note: Open-source module requires RPM Fusion Tainted repository"
@@ -343,13 +348,13 @@ install_nvidia_drivers() {
             sudo dnf install -y akmod-nvidia
             log "Proprietary NVIDIA kernel module installed"
         fi
-
+        
         info "Installing NVIDIA CUDA support..."
         sudo dnf install -y xorg-x11-drv-nvidia-cuda
-
+        
         info "Enabling NVIDIA DRM kernel mode setting..."
         sudo grubby --update-kernel=ALL --args="nvidia-drm.modeset=1"
-
+        
         log "NVIDIA drivers installation completed"
         warn "A reboot is required for the NVIDIA drivers to take effect"
         info "After reboot, you can verify the installation with:"
@@ -358,9 +363,8 @@ install_nvidia_drivers() {
         if [ "$USE_OPENSOURCE_MODULE" = true ]; then
             info "  - lsmod | grep nvidia (should show nvidia_drm, nvidia_modeset, nvidia)"
         fi
-    else
-        info "No NVIDIA GPU detected - skipping NVIDIA drivers installation"
     fi
+}
 }
 
 # Gaming Packages
